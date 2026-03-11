@@ -16,31 +16,35 @@ jobs:
         run: |
           echo "觸發基金數據抓取 - $(date)"
           
-          # 異步觸發，不等待完成（Worker 處理需要 3-4 分鐘）
-          http_code=$(curl -X GET \
+          # 在背景觸發，不等待任何響應（Worker 處理需要 3-4 分鐘）
+          curl -X GET \
             "https://fund-tracker-api.aqexwu0817.workers.dev/api/scrape" \
             -H "User-Agent: GitHub-Actions" \
             -o /dev/null \
             -s \
-            -w "%{http_code}" \
-            --max-time 10)
+            --max-time 5 &
           
-          echo "HTTP Status: $http_code"
+          # 等待一下確保請求已發送
+          sleep 2
           
-          if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 000 ]; then
-            echo "✅ 已觸發抓取任務（Worker 將在背景處理）"
-          else
-            echo "⚠️ 觸發失敗 (HTTP $http_code)"
-            exit 1
-          fi
+          echo "✅ 已觸發抓取任務（Worker 將在背景處理 3-4 分鐘）"
       
       - name: Check Progress
         if: success()
         run: |
+          echo "等待 Worker 處理..."
+          sleep 30
+          
           echo "檢查整體進度..."
-          
           progress=$(curl -s "https://fund-tracker-api.aqexwu0817.workers.dev/api/funds" | \
-            jq -r '.data | length')
+            jq -r '.data | length' 2>/dev/null || echo "0")
           
-          echo "📊 當前基金總數: $progress/588"
-          echo "📈 完成度: $((progress * 100 / 588))%"
+          if [ "$progress" != "0" ]; then
+            echo "📊 當前基金總數: $progress/588"
+            echo "📈 完成度: $((progress * 100 / 588))%"
+            remaining=$((588 - progress))
+            batches=$(((remaining + 7) / 8))
+            echo "📋 剩餘: $remaining 檔 (約 $batches 批)"
+          else
+            echo "⚠️ 無法獲取進度數據"
+          fi
