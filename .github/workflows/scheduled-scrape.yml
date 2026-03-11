@@ -16,24 +16,21 @@ jobs:
         run: |
           echo "觸發基金數據抓取 - $(date)"
           
-          response=$(curl -X GET \
+          # 異步觸發，不等待完成（Worker 處理需要 3-4 分鐘）
+          http_code=$(curl -X GET \
             "https://fund-tracker-api.aqexwu0817.workers.dev/api/scrape" \
             -H "User-Agent: GitHub-Actions" \
-            -w "\nHTTP_CODE:%{http_code}" \
+            -o /dev/null \
             -s \
-            --max-time 120)
-          
-          http_code=$(echo "$response" | grep "HTTP_CODE" | cut -d: -f2)
-          body=$(echo "$response" | sed '/HTTP_CODE/d')
+            -w "%{http_code}" \
+            --max-time 10)
           
           echo "HTTP Status: $http_code"
-          echo "Response: $body"
           
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ 抓取成功"
-            echo "$body" | jq '.' || echo "$body"
+          if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 000 ]; then
+            echo "✅ 已觸發抓取任務（Worker 將在背景處理）"
           else
-            echo "⚠️ 抓取失敗 (HTTP $http_code)"
+            echo "⚠️ 觸發失敗 (HTTP $http_code)"
             exit 1
           fi
       
